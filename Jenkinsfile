@@ -39,7 +39,7 @@ pipeline {
 
                     sh """
                     ssh -i $SSH_KEY -o StrictHostKeyChecking=no $EC2_USER@$ip '
-                        echo "📦 Actualizando sistema..."
+                        echo " Actualizando sistema..."
                         sudo apt-get update -y &&
                         sudo apt-get upgrade -y
 
@@ -56,7 +56,7 @@ pipeline {
 
                         echo " Verificando carpeta de app..."
                         if [ ! -d "$REMOTE_PATH/.git" ]; then
-                            git clone https://github.com/roberto14118927/node-healthcheck.git $REMOTE_PATH
+                            git clone https://github.com/Th3Danny/Jenkins--prueba.git $REMOTE_PATH
                         fi
 
                         echo " Pull y deploy..."
