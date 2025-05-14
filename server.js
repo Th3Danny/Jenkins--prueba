@@ -6,10 +6,14 @@ app.use(helmet());
 app.use(express.json());
 
 app.get('/health', (_req, res) => {
-  res.status(200).json({ status: 'UP', timestamp: new Date().toISOString(), author: 'Gerson Daniel Garcia Dominguez / Danny' });
+    res.status(200).json({
+        status: 'UP',
+        timestamp: new Date().toISOString(),
+        author: 'Gerson Daniel Garcia Dominguez / Danny'
+    });
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Healthcheck service running on port ${PORT}`);
+    console.log(`Healthcheck service running on port ${PORT}`);
 });
