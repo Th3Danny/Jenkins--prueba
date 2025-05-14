@@ -10,7 +10,7 @@ app.get('/healthcheck', (_req, res) => {
 });
 
 app.get('/names', (_req, res) => {
-  res.status(200).json({ author: 'Gerson daniel' });
+  res.status(200).json({ author: 'Gerson Daniel' });
 });
 
 const PORT = process.env.PORT || 3000;
