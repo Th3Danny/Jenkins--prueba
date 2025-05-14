@@ -1,114 +1,73 @@
 pipeline {
     agent any
 
+    tools {
+        nodejs 'NodeJS'
+    }
+
     environment {
-        // Configuración común
-        NODE_ENV = 'production'
         EC2_USER = 'ubuntu'
         SSH_KEY = credentials('ssh-key-ec2')
-        
-        // Configuración por entorno (se sobrescriben según la rama)
-        EC2_IP = ''
-        REMOTE_PATH = ''
-        APP_NAME = 'health-api'
-        BRANCH_NAME = "${env.GIT_BRANCH ?: 'main'}" // Captura la rama correctamente
+        DEV_IP = '3.220.122.151'
+        QA_IP  = '23.22.115.242'
+        PROD_IP = '34.224.192.38'
+        REMOTE_PATH = '/home/ubuntu/node-healthcheck'
     }
 
     stages {
-        stage('Setup Environment') {
+        stage('Detect Branch') {
             steps {
                 script {
-                    // Determina configuración según la rama
-                    switch(env.BRANCH_NAME) {
-                        case 'dev':
-                            env.EC2_IP = '3.220.122.151' // IP elástica DEV
-                            env.REMOTE_PATH = '/home/ubuntu/Jenkins--prueba-dev'
-                            env.APP_NAME = 'health-api-dev'
-                            break
-                        case 'qa':
-                            env.EC2_IP = '3.220.122.152' // IP elástica QA
-                            env.REMOTE_PATH = '/home/ubuntu/Jenkins--prueba-qa'
-                            env.APP_NAME = 'health-api-qa'
-                            break
-                        case 'main':
-                            env.EC2_IP = '3.220.122.153' // IP elástica PROD
-                            env.REMOTE_PATH = '/home/ubuntu/Jenkins--prueba-prod'
-                            env.APP_NAME = 'health-api-prod'
-                            break
-                        default:
-                            error("Rama no soportada para deploy: ${env.BRANCH_NAME}")
-                    }
-                    
-                    echo " Configurando deploy en ${env.BRANCH_NAME.toUpperCase()}"
-                    echo "  Servidor: ${env.EC2_IP}"
-                    echo " Ruta: ${env.REMOTE_PATH}"
+                    env.ACTUAL_BRANCH = env.BRANCH_NAME ?: 'main'
+                    echo "🔍 Rama activa: ${env.ACTUAL_BRANCH}"
                 }
-            }
-        }
-
-        stage('Checkout') {
-            steps {
-                script {
-                    if (!env.BRANCH_NAME) {
-                        error("La variable de entorno BRANCH_NAME no está definida")
-                    }
-                }
-                checkout([$class: 'GitSCM', 
-                         branches: [[name: "origin/${env.BRANCH_NAME}"]], 
-                         userRemoteConfigs: [[url: 'https://github.com/Th3Danny/Jenkins--prueba.git']]])
-            }
-        }
-
-        stage('Build') {
-            steps {
-                sh 'rm -rf node_modules || true'
-                sh 'npm ci'
             }
         }
 
         stage('Deploy') {
-            when {
-                anyOf {
-                    branch 'dev'
-                    branch 'qa'
-                    branch 'main'
-                }
-            }
             steps {
                 script {
-                    // Validación adicional para producción
-                    if (env.BRANCH_NAME == 'main') {
-                        input message: "¿Confirmas despliegue en PRODUCCIÓN?", ok: "Desplegar"
+                    def ip = env.ACTUAL_BRANCH == 'dev' ? DEV_IP :
+                             env.ACTUAL_BRANCH == 'qa'   ? QA_IP :
+                             env.ACTUAL_BRANCH == 'main'  ? PROD_IP : null
+
+                    def pm2_name = "${env.ACTUAL_BRANCH}-health"
+
+                    if (ip == null) {
+                        error "Branch ${env.ACTUAL_BRANCH} no está configurada para despliegue."
                     }
-                    
-                    sshagent([SSH_KEY]) {
-                        sh """
-                            ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_IP} "
-                                set -e # Detener en caso de error
-                                cd ${REMOTE_PATH}
-                                git fetch --all
-                                git reset --hard origin/${BRANCH_NAME}
-                                npm ci --omit=dev
-                                pm2 delete ${APP_NAME} || true
-                                pm2 start server.js --name ${APP_NAME}
-                                pm2 save
-                            "
-                        """
-                    }
-                    
-                    echo "Despliegue en ${BRANCH_NAME.toUpperCase()} completado"
+
+                    sh """
+                    ssh -i $SSH_KEY -o StrictHostKeyChecking=no $EC2_USER@$ip '
+                        echo "📦 Actualizando sistema..."
+                        sudo apt-get update -y &&
+                        sudo apt-get upgrade -y
+
+                        echo " Verificando Node.js..."
+                        if ! command -v node > /dev/null; then
+                            curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+                            sudo apt-get install -y nodejs
+                        fi
+
+                        echo " Verificando PM2..."
+                        if ! command -v pm2 > /dev/null; then
+                            sudo npm install -g pm2
+                        fi
+
+                        echo " Verificando carpeta de app..."
+                        if [ ! -d "$REMOTE_PATH/.git" ]; then
+                            git clone https://github.com/roberto14118927/node-healthcheck.git $REMOTE_PATH
+                        fi
+
+                        echo " Pull y deploy..."
+                        cd $REMOTE_PATH &&
+                        git pull origin ${env.ACTUAL_BRANCH} &&
+                        npm ci &&
+                        pm2 restart ${pm2_name} || pm2 start server.js --name ${pm2_name}
+                    '
+                    """
                 }
             }
-        }
-    }
-
-    post {
-        failure {
-            echo "Pipeline fallido en la etapa: ${currentBuild.result}"
-            // slackSend channel: '#alertas', message: "Falló deploy de ${BRANCH_NAME}"
-        }
-        success {
-            echo "🎉 Pipeline ejecutado correctamente"
         }
     }
 }
