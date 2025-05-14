@@ -11,6 +11,7 @@ pipeline {
         EC2_IP = ''
         REMOTE_PATH = ''
         APP_NAME = 'health-api'
+        BRANCH_NAME = "${env.GIT_BRANCH ?: 'main'}" // Captura la rama correctamente
     }
 
     stages {
@@ -47,8 +48,13 @@ pipeline {
 
         stage('Checkout') {
             steps {
+                script {
+                    if (!env.BRANCH_NAME) {
+                        error("La variable de entorno BRANCH_NAME no está definida")
+                    }
+                }
                 checkout([$class: 'GitSCM', 
-                         branches: [[name: env.BRANCH_NAME]], 
+                         branches: [[name: "origin/${env.BRANCH_NAME}"]], 
                          userRemoteConfigs: [[url: 'https://github.com/Th3Danny/Jenkins--prueba.git']]])
             }
         }
@@ -98,7 +104,7 @@ pipeline {
 
     post {
         failure {
-            echo " Pipeline fallido en la etapa: ${currentBuild.result}"
+            echo "Pipeline fallido en la etapa: ${currentBuild.result}"
             // slackSend channel: '#alertas', message: "Falló deploy de ${BRANCH_NAME}"
         }
         success {
