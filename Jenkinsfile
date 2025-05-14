@@ -4,7 +4,7 @@ pipeline {
     environment {
         NODE_ENV = 'production'
         EC2_USER = 'ubuntu'
-        EC2_IP = '54.242.9.234'
+        EC2_IP = '3.220.122.151'
         REMOTE_PATH = '/home/ubuntu/Jenkins--prueba'
         SSH_KEY = credentials('ssh-key-ec2')
     }
